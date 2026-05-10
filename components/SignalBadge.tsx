@@ -1,0 +1,1 @@
+export default function SignalBadge({level}:{level:string}){ const map:any={STRONG_SIGNAL:'bg-emerald-700',THIN_LIQUIDITY:'bg-yellow-700',WATCH:'bg-cyan-700',NEUTRAL:'bg-zinc-700'}; return <span className={`badge ${map[level]||'bg-zinc-700'}`}>{level}</span>; }
