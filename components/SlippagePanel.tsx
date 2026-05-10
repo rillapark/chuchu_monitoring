@@ -1,0 +1,1 @@
+export default function SlippagePanel({s}:{s:any}){return <div className='text-xs mt-2'>Buy $5k {s.buy5000?.avgPxUsd?.toFixed?.(2)||'-'} ({s.buy5000?.slippagePct?.toFixed?.(2)||'-'}%) · Sell $5k {s.sell5000?.avgPxUsd?.toFixed?.(2)||'-'} ({s.sell5000?.slippagePct?.toFixed?.(2)||'-'}%)</div>}

@@ -1,0 +1,1 @@
+export default function FundingBadge({h}:{h:any}){ const p=h.funding1h>0?'Long pays Short':'Short pays Long'; return <div className='text-xs'>1h {(h.funding1h*100).toFixed(4)}% · APR {(h.fundingAprPct||0).toFixed(2)}% ({p})</div>; }

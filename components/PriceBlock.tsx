@@ -1,0 +1,2 @@
+import { formatKrw, formatUsd } from '@/lib/format';
+export default function PriceBlock({a}:{a:any}){return <div className='space-y-1 text-sm'><div>국내: <b>{formatKrw(a.domestic.priceKrw)}</b> {a.domestic.isClose&&<span className='badge bg-yellow-700 ml-1'>Close</span>}</div><div>HL Mark {formatUsd(a.hyperliquid.markPxUsd)} / Mid {formatUsd(a.hyperliquid.midPxUsd)}</div><div>Bid/Ask {formatUsd(a.hyperliquid.bestBidUsd)} / {formatUsd(a.hyperliquid.bestAskUsd)} · Spread {a.hyperliquid.spreadPct?.toFixed?.(3)??'-'}%</div></div>}

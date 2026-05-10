@@ -1,0 +1,2 @@
+export async function fetchFx(){ const key=process.env.EXCHANGE_API_KEY; if(key){ const r=await fetch(`https://v6.exchangerate-api.com/v6/${key}/latest/USD`,{cache:'no-store'}); const j=await r.json(); const rate=j?.conversion_rates?.KRW; if(rate) return {usdKrw:Number(rate),source:'exchange-api',timestamp:new Date().toISOString()}; }
+ const r=await fetch('https://open.er-api.com/v6/latest/USD',{cache:'no-store'}); const j=await r.json(); return {usdKrw:Number(j?.rates?.KRW),source:'open.er-api',timestamp:j?.time_last_update_utc||new Date().toISOString()}; }
