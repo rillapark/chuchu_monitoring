@@ -37,9 +37,9 @@ const nfKrw = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 });
 const nfUsd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 
 async function fetchUsdKrw() {
-  const res = await fetch('https://api.exchangerate.host/latest?base=USD&symbols=KRW');
+  const res = await fetch('https://open.er-api.com/v6/latest/USD');
   const data = await res.json();
-  return data?.rates?.KRW;
+  return data?.rates?.KRW ?? data?.conversion_rates?.KRW ?? null;
 }
 
 async function fetchKrxSnapshot() {
@@ -85,7 +85,14 @@ function setBook(listEl, levels) {
 
 async function refresh() {
   try {
-    const [usdkrw, krx, hlMap] = await Promise.all([fetchUsdKrw(), fetchKrxSnapshot(), fetchHyperliquidMeta()]);
+    const [fxRes, krxRes, hlRes] = await Promise.allSettled([fetchUsdKrw(), fetchKrxSnapshot(), fetchHyperliquidMeta()]);
+    const usdkrw = fxRes.status === 'fulfilled' ? Number(fxRes.value) : NaN;
+    const krx = krxRes.status === 'fulfilled' ? krxRes.value : [];
+    const hlMap = hlRes.status === 'fulfilled' ? hlRes.value : new Map();
+
+    if (!Number.isFinite(usdkrw)) {
+      throw new Error('USD/KRW 환율 조회 실패');
+    }
     fxRateEl.textContent = `USD/KRW: ${usdkrw.toFixed(2)}`;
 
     for (const a of ASSETS) {
@@ -112,9 +119,14 @@ async function refresh() {
       }
       card.querySelector('.funding').textContent = `${fundingHourly.toFixed(4)}% / ${fundingApr.toFixed(2)}%`;
 
-      const book = await fetchL2Book(a.hlCoin);
-      setBook(card.querySelector('.asks'), book.asks);
-      setBook(card.querySelector('.bids'), book.bids);
+      try {
+        const book = await fetchL2Book(a.hlCoin);
+        setBook(card.querySelector('.asks'), book.asks);
+        setBook(card.querySelector('.bids'), book.bids);
+      } catch {
+        card.querySelector('.asks').innerHTML = '<li><span>-</span><span>-</span></li>';
+        card.querySelector('.bids').innerHTML = '<li><span>-</span><span>-</span></li>';
+      }
     }
 
     updatedEl.textContent = `업데이트: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`;
