@@ -36,100 +36,50 @@ for (const asset of ASSETS) {
 const nfKrw = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 });
 const nfUsd = new Intl.NumberFormat('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 
-async function fetchUsdKrw() {
-  const res = await fetch('https://open.er-api.com/v6/latest/USD');
-  const data = await res.json();
-  return data?.rates?.KRW ?? data?.conversion_rates?.KRW ?? null;
-}
-
-async function fetchKrxSnapshot() {
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ASSETS.map((a) => `${a.code}.KS`).join(',')}`;
-  const res = await fetch(url);
-  const data = await res.json();
-  return data?.quoteResponse?.result ?? [];
-}
-
-async function fetchHyperliquidMeta() {
-  const res = await fetch('https://api.hyperliquid.xyz/info', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
-  });
-  const [meta, ctxs] = await res.json();
-  const map = new Map();
-  meta.universe.forEach((u, i) => map.set(u.name, ctxs[i]));
-  return map;
-}
-
-async function fetchL2Book(coin) {
-  const res = await fetch('https://api.hyperliquid.xyz/info', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ type: 'l2Book', coin }),
-  });
-  const data = await res.json();
-  return {
-    asks: (data.levels?.[0] ?? []).slice(0, 5),
-    bids: (data.levels?.[1] ?? []).slice(0, 5),
-  };
-}
-
 function setBook(listEl, levels) {
   listEl.innerHTML = '';
-  levels.forEach((lv) => {
+  (levels ?? []).forEach((lv) => {
     const li = document.createElement('li');
     li.innerHTML = `<span>${nfUsd.format(Number(lv.px))}</span><span>${Number(lv.sz).toFixed(2)}</span>`;
     listEl.appendChild(li);
   });
+  if (!listEl.children.length) {
+    listEl.innerHTML = '<li><span>-</span><span>-</span></li>';
+  }
 }
 
 async function refresh() {
   try {
-    const [fxRes, krxRes, hlRes] = await Promise.allSettled([fetchUsdKrw(), fetchKrxSnapshot(), fetchHyperliquidMeta()]);
-    const usdkrw = fxRes.status === 'fulfilled' ? Number(fxRes.value) : NaN;
-    const krx = krxRes.status === 'fulfilled' ? krxRes.value : [];
-    const hlMap = hlRes.status === 'fulfilled' ? hlRes.value : new Map();
+    const res = await fetch('/api/market', { cache: 'no-store' });
+    if (!res.ok) throw new Error('서버 API 조회 실패');
+    const data = await res.json();
 
-    if (!Number.isFinite(usdkrw)) {
-      throw new Error('USD/KRW 환율 조회 실패');
-    }
-    fxRateEl.textContent = `USD/KRW: ${usdkrw.toFixed(2)}`;
+    fxRateEl.textContent = `USD/KRW: ${Number(data.fxRate).toFixed(2)}`;
 
-    for (const a of ASSETS) {
-      const card = cardMap.get(a.hlCoin);
-      const krxRow = krx.find((x) => x.symbol === `${a.code}.KS`);
-      const krxPrice = krxRow?.regularMarketPrice ?? krxRow?.regularMarketPreviousClose;
-      const hl = hlMap.get(a.hlCoin);
-      const hlUsd = Number(hl?.markPx ?? hl?.midPx ?? 0);
-      const hlKrw = hlUsd * usdkrw;
-      const gap = krxPrice ? ((hlKrw - krxPrice) / krxPrice) * 100 : null;
-      const fundingHourly = Number(hl?.funding ?? 0) * 100;
-      const fundingApr = Number(hl?.funding ?? 0) * 24 * 365 * 100;
+    for (const row of data.rows ?? []) {
+      const card = cardMap.get(row.hlCoin);
+      if (!card) continue;
 
-      card.querySelector('.krxPrice').textContent = krxPrice ? `${nfKrw.format(krxPrice)}원` : '-';
-      card.querySelector('.hlPrice').textContent = hlUsd ? `${nfKrw.format(hlKrw)}원` : '-';
-      card.querySelector('.hlUsd').textContent = hlUsd ? `$${nfUsd.format(hlUsd)}` : '-';
+      card.querySelector('.krxPrice').textContent = row.krxPrice ? `${nfKrw.format(row.krxPrice)}원` : '-';
+      card.querySelector('.hlPrice').textContent = row.hlUsd ? `${nfKrw.format(row.hlKrw)}원` : '-';
+      card.querySelector('.hlUsd').textContent = row.hlUsd ? `$${nfUsd.format(row.hlUsd)}` : '-';
+
       const gapEl = card.querySelector('.gap');
-      if (gap === null) {
+      if (row.gapPct === null || row.gapPct === undefined) {
         gapEl.textContent = '-';
         gapEl.className = 'gap';
       } else {
+        const gap = Number(row.gapPct);
         gapEl.textContent = `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%`;
         gapEl.className = `gap ${gap >= 0 ? 'pos' : 'neg'}`;
       }
-      card.querySelector('.funding').textContent = `${fundingHourly.toFixed(4)}% / ${fundingApr.toFixed(2)}%`;
 
-      try {
-        const book = await fetchL2Book(a.hlCoin);
-        setBook(card.querySelector('.asks'), book.asks);
-        setBook(card.querySelector('.bids'), book.bids);
-      } catch {
-        card.querySelector('.asks').innerHTML = '<li><span>-</span><span>-</span></li>';
-        card.querySelector('.bids').innerHTML = '<li><span>-</span><span>-</span></li>';
-      }
+      card.querySelector('.funding').textContent = `${Number(row.funding1hPct ?? 0).toFixed(4)}% / ${Number(row.fundingAprPct ?? 0).toFixed(2)}%`;
+      setBook(card.querySelector('.asks'), row.orderbook?.asks);
+      setBook(card.querySelector('.bids'), row.orderbook?.bids);
     }
 
-    updatedEl.textContent = `업데이트: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`;
+    updatedEl.textContent = `업데이트: ${new Date(data.updatedAt || Date.now()).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`;
   } catch (err) {
     console.error(err);
     updatedEl.textContent = `업데이트 실패: ${err.message}`;
